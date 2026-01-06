@@ -27,6 +27,8 @@ PROJECT_ID = "digital-workshop-hub"
 FIREBASE_PROJECT_DIR = os.path.expanduser("~/repos/digital-workshop-hub")
 CREDENTIALS_DIR = os.path.expanduser("~/.config/gcloud")
 CREDENTIALS_FILE = os.path.join(CREDENTIALS_DIR, "digital-workshop-hub-credentials.json")
+SENTINEL_DIR = os.path.expanduser("~/.config/dev-od-computer")
+SENTINEL_FILE = os.path.join(SENTINEL_DIR, "setup_complete")
 
 
 def setup_credentials_from_secret():
@@ -306,6 +308,35 @@ def setup_firebase_project(project_dir):
     return True
 
 
+def create_sentinel_file(creds_path):
+    """Create sentinel file to mark setup as complete."""
+    try:
+        os.makedirs(SENTINEL_DIR, mode=0o700, exist_ok=True)
+        
+        # Read credentials to get metadata
+        with open(creds_path, 'r') as f:
+            creds_data = json.load(f)
+        
+        sentinel_data = {
+            "setup_complete": True,
+            "project_id": creds_data.get('project_id'),
+            "client_email": creds_data.get('client_email'),
+            "private_key_id": creds_data.get('private_key_id'),
+            "credentials_file": CREDENTIALS_FILE,
+            "firebase_project_dir": FIREBASE_PROJECT_DIR,
+            "setup_timestamp": subprocess.check_output(['date', '-Iseconds']).decode().strip()
+        }
+        
+        with open(SENTINEL_FILE, 'w') as f:
+            json.dump(sentinel_data, f, indent=2)
+        
+        os.chmod(SENTINEL_FILE, stat.S_IRUSR | stat.S_IWUSR)
+        return True
+    except Exception as e:
+        print(f"Warning: Could not create sentinel file: {e}")
+        return False
+
+
 def verify_firebase_cli():
     """Verify Firebase CLI is installed and working."""
     print("\n" + "=" * 50)
@@ -368,6 +399,9 @@ def main():
     
     # Step 6: Verify Firebase CLI
     verify_firebase_cli()
+    
+    # Step 7: Create sentinel file to mark setup complete
+    create_sentinel_file(creds_path)
     
     # Summary
     print("\n" + "=" * 50)

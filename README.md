@@ -2,45 +2,48 @@
 
 Devin development environment configuration for OD (Open Digital) projects.
 
-## Quick Start - First Run Setup
+## Zero-Touch Deployment
 
-When starting a new Devin session, simply run the first-run setup script:
+This repo supports fully automatic setup on new Devin sessions. Once configured, the setup runs automatically on login and skips if already completed.
+
+### One-Time Setup
+
+1. **Add the Devin secret** (in Devin settings):
+   - **Secret Name**: `GOOGLE_SERVICE_ACCOUNT_JSON`
+   - **Secret Value**: The entire contents of your service account JSON key file
+
+2. **Enable auto-setup** (run once in any Devin session):
+   ```bash
+   echo '' >> ~/.bashrc
+   echo '# DEV-OD-Computer auto-setup' >> ~/.bashrc
+   echo 'if [ -f ~/repos/DEV-OD-Computer/scripts/auto_setup.sh ]; then ~/repos/DEV-OD-Computer/scripts/auto_setup.sh; fi' >> ~/.bashrc
+   ```
+
+That's it! Future sessions will automatically set up Firebase and be ready for editing.
+
+### What Auto-Setup Does
+
+The setup automatically:
+1. Reads credentials from `GOOGLE_SERVICE_ACCOUNT_JSON` secret
+2. Creates a secure credentials file at `~/.config/gcloud/digital-workshop-hub-credentials.json`
+3. Verifies Google Auth and Firebase Admin SDK access
+4. Downloads the Firebase project to `~/repos/digital-workshop-hub`
+5. Downloads current Firestore and Storage rules
+6. Creates a sentinel file to skip setup on subsequent runs
+
+### Manual Setup (Alternative)
+
+If you prefer to run setup manually:
 
 ```bash
 python scripts/first_run_setup.py
 ```
-
-The script will automatically:
-1. Read credentials from `GOOGLE_SERVICE_ACCOUNT_JSON` secret (or `GOOGLE_APPLICATION_CREDENTIALS` file path)
-2. Create a secure credentials file at `~/.config/gcloud/digital-workshop-hub-credentials.json`
-3. Verify Google Auth and Firebase Admin SDK access
-4. Download the Firebase project to `~/repos/digital-workshop-hub`
-5. Download current Firestore and Storage rules
-6. Set up the project ready for editing
 
 After setup, you can edit files and deploy:
 ```bash
 cd ~/repos/digital-workshop-hub
 # Edit firestore.rules, storage.rules, etc.
 firebase deploy --project digital-workshop-hub
-```
-
-## Devin Secret Setup (Recommended)
-
-For automatic setup in new Devin sessions, add the service account JSON as a Devin secret:
-
-1. **Secret Name**: `GOOGLE_SERVICE_ACCOUNT_JSON`
-2. **Secret Value**: The entire contents of your service account JSON key file
-
-The first-run script will automatically create a secure credentials file from this secret.
-
-## Alternative: File-based Authentication
-
-If you prefer to use a file path instead of a secret:
-
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
-python scripts/first_run_setup.py
 ```
 
 ## Prerequisites
