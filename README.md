@@ -4,19 +4,19 @@ Devin development environment configuration for OD (Open Digital) projects.
 
 ## Quick Start - First Run Setup
 
-When starting a new Devin session, run the first-run setup script to automatically configure Firebase and download the project:
+When starting a new Devin session, simply run the first-run setup script:
 
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/digital-workshop-hub-service-account.json"
 python scripts/first_run_setup.py
 ```
 
-This will:
-1. Verify Google Auth credentials
-2. Verify Firebase Admin SDK access
-3. Download the Firebase project to `~/repos/digital-workshop-hub`
-4. Download current Firestore and Storage rules
-5. Set up the project ready for editing
+The script will automatically:
+1. Read credentials from `GOOGLE_SERVICE_ACCOUNT_JSON` secret (or `GOOGLE_APPLICATION_CREDENTIALS` file path)
+2. Create a secure credentials file at `~/.config/gcloud/digital-workshop-hub-credentials.json`
+3. Verify Google Auth and Firebase Admin SDK access
+4. Download the Firebase project to `~/repos/digital-workshop-hub`
+5. Download current Firestore and Storage rules
+6. Set up the project ready for editing
 
 After setup, you can edit files and deploy:
 ```bash
@@ -25,27 +25,29 @@ cd ~/repos/digital-workshop-hub
 firebase deploy --project digital-workshop-hub
 ```
 
+## Devin Secret Setup (Recommended)
+
+For automatic setup in new Devin sessions, add the service account JSON as a Devin secret:
+
+1. **Secret Name**: `GOOGLE_SERVICE_ACCOUNT_JSON`
+2. **Secret Value**: The entire contents of your service account JSON key file
+
+The first-run script will automatically create a secure credentials file from this secret.
+
+## Alternative: File-based Authentication
+
+If you prefer to use a file path instead of a secret:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
+python scripts/first_run_setup.py
+```
+
 ## Prerequisites
 
 - Python 3.x with `firebase-admin` and `google-auth` packages (auto-installed by setup script)
 - Firebase CLI (`npm install -g firebase-tools`)
 - Service account JSON key for the `digital-workshop-hub` project with **Firebase Admin** role
-
-## Authentication
-
-For non-interactive authentication (recommended for Devin/CI), use a service account:
-
-1. Obtain a service account JSON key from the `digital-workshop-hub` GCP project
-2. The service account needs the **Firebase Admin** role in IAM
-3. Set the environment variable:
-   ```bash
-   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
-   ```
-
-## Devin Session Setup
-
-For new Devin sessions, ensure the following secrets are configured:
-- `GOOGLE_APPLICATION_CREDENTIALS` - Path to the service account JSON key file
 
 ## Scripts
 

@@ -5,9 +5,9 @@ First Run Setup Script for Devin Sessions
 This script automatically configures Firebase and Google Auth for new Devin sessions,
 then downloads the Firebase project (digital-workshop-hub) ready for editing.
 
-Prerequisites:
-- GOOGLE_APPLICATION_CREDENTIALS environment variable must be set to the service account JSON key path
-- Or the service account JSON key must be available as a Devin secret
+Credentials can be provided in two ways:
+1. GOOGLE_SERVICE_ACCOUNT_JSON - Environment variable containing the JSON key content
+2. GOOGLE_APPLICATION_CREDENTIALS - Path to an existing JSON key file
 
 Usage:
     python scripts/first_run_setup.py
@@ -18,12 +18,66 @@ import sys
 import json
 import subprocess
 import requests
+import stat
 from pathlib import Path
 
 
 # Configuration
 PROJECT_ID = "digital-workshop-hub"
 FIREBASE_PROJECT_DIR = os.path.expanduser("~/repos/digital-workshop-hub")
+CREDENTIALS_DIR = os.path.expanduser("~/.config/gcloud")
+CREDENTIALS_FILE = os.path.join(CREDENTIALS_DIR, "digital-workshop-hub-credentials.json")
+
+
+def setup_credentials_from_secret():
+    """Create credentials file from GOOGLE_SERVICE_ACCOUNT_JSON secret."""
+    json_content = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+    
+    if not json_content:
+        return None
+    
+    print("Found GOOGLE_SERVICE_ACCOUNT_JSON secret")
+    
+    try:
+        # Validate JSON content
+        creds_data = json.loads(json_content)
+        
+        # Verify it looks like a service account key
+        required_fields = ['type', 'project_id', 'private_key', 'client_email']
+        for field in required_fields:
+            if field not in creds_data:
+                print(f"ERROR: Invalid service account JSON - missing '{field}'")
+                return None
+        
+        if creds_data.get('type') != 'service_account':
+            print("ERROR: JSON is not a service account key")
+            return None
+        
+        # Create credentials directory with secure permissions
+        os.makedirs(CREDENTIALS_DIR, mode=0o700, exist_ok=True)
+        
+        # Write credentials file with secure permissions
+        with open(CREDENTIALS_FILE, 'w') as f:
+            json.dump(creds_data, f, indent=2)
+        
+        # Set file permissions to owner read/write only (600)
+        os.chmod(CREDENTIALS_FILE, stat.S_IRUSR | stat.S_IWUSR)
+        
+        print(f"Created credentials file: {CREDENTIALS_FILE}")
+        print(f"  Project ID: {creds_data.get('project_id')}")
+        print(f"  Service Account: {creds_data.get('client_email')}")
+        
+        # Set environment variable for this session
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = CREDENTIALS_FILE
+        
+        return CREDENTIALS_FILE
+        
+    except json.JSONDecodeError as e:
+        print(f"ERROR: Invalid JSON in GOOGLE_SERVICE_ACCOUNT_JSON: {e}")
+        return None
+    except Exception as e:
+        print(f"ERROR: Could not create credentials file: {e}")
+        return None
 
 
 def check_credentials():
@@ -32,14 +86,21 @@ def check_credentials():
     print("Step 1: Checking Google Credentials")
     print("=" * 50)
     
+    # First, try to set up credentials from the JSON secret
+    creds_path = setup_credentials_from_secret()
+    
+    if creds_path:
+        return creds_path
+    
+    # Fall back to GOOGLE_APPLICATION_CREDENTIALS environment variable
     creds_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
     
     if not creds_path:
-        print("ERROR: GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
-        print("\nTo fix this:")
-        print("1. Ensure you have the service account JSON key file")
-        print("2. Set the environment variable:")
-        print("   export GOOGLE_APPLICATION_CREDENTIALS='/path/to/service-account-key.json'")
+        print("ERROR: No credentials found")
+        print("\nTo fix this, set one of the following:")
+        print("1. GOOGLE_SERVICE_ACCOUNT_JSON - The JSON content of your service account key")
+        print("   (Recommended for Devin secrets)")
+        print("2. GOOGLE_APPLICATION_CREDENTIALS - Path to your service account JSON file")
         return None
     
     if not os.path.exists(creds_path):
