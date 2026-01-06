@@ -1,0 +1,327 @@
+#!/usr/bin/env python3
+"""
+First Run Setup Script for Devin Sessions
+
+This script automatically configures Firebase and Google Auth for new Devin sessions,
+then downloads the Firebase project (digital-workshop-hub) ready for editing.
+
+Prerequisites:
+- GOOGLE_APPLICATION_CREDENTIALS environment variable must be set to the service account JSON key path
+- Or the service account JSON key must be available as a Devin secret
+
+Usage:
+    python scripts/first_run_setup.py
+"""
+
+import os
+import sys
+import json
+import subprocess
+import requests
+from pathlib import Path
+
+
+# Configuration
+PROJECT_ID = "digital-workshop-hub"
+FIREBASE_PROJECT_DIR = os.path.expanduser("~/repos/digital-workshop-hub")
+
+
+def check_credentials():
+    """Check if Google credentials are configured."""
+    print("=" * 50)
+    print("Step 1: Checking Google Credentials")
+    print("=" * 50)
+    
+    creds_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    
+    if not creds_path:
+        print("ERROR: GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
+        print("\nTo fix this:")
+        print("1. Ensure you have the service account JSON key file")
+        print("2. Set the environment variable:")
+        print("   export GOOGLE_APPLICATION_CREDENTIALS='/path/to/service-account-key.json'")
+        return None
+    
+    if not os.path.exists(creds_path):
+        print(f"ERROR: Credentials file not found: {creds_path}")
+        return None
+    
+    print(f"Credentials file found: {creds_path}")
+    return creds_path
+
+
+def verify_google_auth(creds_path):
+    """Verify Google Auth is working."""
+    print("\n" + "=" * 50)
+    print("Step 2: Verifying Google Auth")
+    print("=" * 50)
+    
+    try:
+        from google.oauth2 import service_account
+        from google.auth.transport.requests import Request
+        
+        SCOPES = [
+            'https://www.googleapis.com/auth/cloud-platform',
+            'https://www.googleapis.com/auth/firebase'
+        ]
+        
+        credentials = service_account.Credentials.from_service_account_file(
+            creds_path,
+            scopes=SCOPES
+        )
+        
+        print(f"Service Account: {credentials.service_account_email}")
+        print(f"Project ID: {credentials.project_id}")
+        
+        credentials.refresh(Request())
+        print(f"Token valid: {credentials.valid}")
+        print("Google Auth: OK")
+        return credentials
+        
+    except ImportError:
+        print("ERROR: google-auth package not installed")
+        print("Installing required packages...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "google-auth", "google-auth-oauthlib", "requests", "-q"])
+        return verify_google_auth(creds_path)
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return None
+
+
+def verify_firebase_admin(creds_path):
+    """Verify Firebase Admin SDK is working."""
+    print("\n" + "=" * 50)
+    print("Step 3: Verifying Firebase Admin SDK")
+    print("=" * 50)
+    
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, auth
+        
+        # Clean up any existing app
+        try:
+            firebase_admin.delete_app(firebase_admin.get_app())
+        except:
+            pass
+        
+        cred = credentials.Certificate(creds_path)
+        app = firebase_admin.initialize_app(cred)
+        
+        print(f"App name: {app.name}")
+        print(f"Project ID: {app.project_id}")
+        
+        # Test Firebase Auth access
+        page = auth.list_users()
+        user_count = len(list(page.users))
+        print(f"Users found: {user_count}")
+        print("Firebase Admin SDK: OK")
+        return True
+        
+    except ImportError:
+        print("ERROR: firebase-admin package not installed")
+        print("Installing required packages...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "firebase-admin", "-q"])
+        return verify_firebase_admin(creds_path)
+    except Exception as e:
+        print(f"ERROR: {e}")
+        print("Firebase Admin SDK may need additional IAM permissions")
+        return False
+
+
+def download_firebase_rules(credentials, project_dir):
+    """Download Firestore and Storage rules from Firebase."""
+    print("\n" + "=" * 50)
+    print("Step 4: Downloading Firebase Rules")
+    print("=" * 50)
+    
+    from google.auth.transport.requests import Request
+    
+    # Refresh credentials if needed
+    if not credentials.valid:
+        credentials.refresh(Request())
+    
+    headers = {'Authorization': f'Bearer {credentials.token}'}
+    
+    # Get releases to find current rulesets
+    releases_url = f"https://firebaserules.googleapis.com/v1/projects/{PROJECT_ID}/releases"
+    response = requests.get(releases_url, headers=headers)
+    
+    if response.status_code != 200:
+        print(f"ERROR: Could not fetch releases: {response.status_code}")
+        return False
+    
+    releases = response.json().get('releases', [])
+    
+    for release in releases:
+        release_name = release.get('name', '')
+        ruleset_name = release.get('rulesetName', '')
+        
+        if not ruleset_name:
+            continue
+        
+        # Fetch the ruleset content
+        ruleset_url = f"https://firebaserules.googleapis.com/v1/{ruleset_name}"
+        ruleset_response = requests.get(ruleset_url, headers=headers)
+        
+        if ruleset_response.status_code != 200:
+            continue
+        
+        ruleset = ruleset_response.json()
+        
+        if 'source' in ruleset and 'files' in ruleset['source']:
+            for f in ruleset['source']['files']:
+                filename = f.get('name', '')
+                content = f.get('content', '')
+                
+                if 'firestore' in release_name.lower() or 'firestore' in filename.lower():
+                    filepath = os.path.join(project_dir, 'firestore.rules')
+                    with open(filepath, 'w') as outfile:
+                        outfile.write(content)
+                    print(f"Downloaded: firestore.rules")
+                
+                elif 'storage' in release_name.lower() or 'storage' in filename.lower():
+                    filepath = os.path.join(project_dir, 'storage.rules')
+                    with open(filepath, 'w') as outfile:
+                        outfile.write(content)
+                    print(f"Downloaded: storage.rules")
+    
+    return True
+
+
+def setup_firebase_project(project_dir):
+    """Set up the Firebase project directory with configuration files."""
+    print("\n" + "=" * 50)
+    print("Step 5: Setting Up Firebase Project Directory")
+    print("=" * 50)
+    
+    # Create project directory
+    os.makedirs(project_dir, exist_ok=True)
+    print(f"Project directory: {project_dir}")
+    
+    # Create firebase.json
+    firebase_config = {
+        "firestore": {
+            "rules": "firestore.rules",
+            "indexes": "firestore.indexes.json"
+        },
+        "hosting": {
+            "public": "public",
+            "ignore": [
+                "firebase.json",
+                "**/.*",
+                "**/node_modules/**"
+            ]
+        },
+        "storage": {
+            "rules": "storage.rules"
+        }
+    }
+    
+    with open(os.path.join(project_dir, 'firebase.json'), 'w') as f:
+        json.dump(firebase_config, f, indent=2)
+    print("Created: firebase.json")
+    
+    # Create .firebaserc
+    firebaserc = {
+        "projects": {
+            "default": PROJECT_ID
+        }
+    }
+    
+    with open(os.path.join(project_dir, '.firebaserc'), 'w') as f:
+        json.dump(firebaserc, f, indent=2)
+    print("Created: .firebaserc")
+    
+    # Create empty indexes file
+    indexes = {"indexes": [], "fieldOverrides": []}
+    with open(os.path.join(project_dir, 'firestore.indexes.json'), 'w') as f:
+        json.dump(indexes, f, indent=2)
+    print("Created: firestore.indexes.json")
+    
+    # Create public directory for hosting
+    os.makedirs(os.path.join(project_dir, 'public'), exist_ok=True)
+    print("Created: public/")
+    
+    return True
+
+
+def verify_firebase_cli():
+    """Verify Firebase CLI is installed and working."""
+    print("\n" + "=" * 50)
+    print("Step 6: Verifying Firebase CLI")
+    print("=" * 50)
+    
+    try:
+        result = subprocess.run(
+            ['firebase', '--version'],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0:
+            print(f"Firebase CLI version: {result.stdout.strip()}")
+            return True
+        else:
+            print("Firebase CLI not working properly")
+            return False
+    except FileNotFoundError:
+        print("Firebase CLI not installed")
+        print("Installing Firebase CLI...")
+        subprocess.run(['npm', 'install', '-g', 'firebase-tools'], capture_output=True)
+        return verify_firebase_cli()
+
+
+def main():
+    print("=" * 50)
+    print("DEV-OD-Computer First Run Setup")
+    print("=" * 50)
+    print(f"\nThis script will configure Firebase for project: {PROJECT_ID}")
+    print(f"Firebase project will be downloaded to: {FIREBASE_PROJECT_DIR}")
+    print()
+    
+    # Step 1: Check credentials
+    creds_path = check_credentials()
+    if not creds_path:
+        print("\n[FAILED] Setup cannot continue without credentials")
+        return 1
+    
+    # Step 2: Verify Google Auth
+    credentials = verify_google_auth(creds_path)
+    if not credentials:
+        print("\n[FAILED] Google Auth verification failed")
+        return 1
+    
+    # Step 3: Verify Firebase Admin SDK
+    firebase_ok = verify_firebase_admin(creds_path)
+    if not firebase_ok:
+        print("\n[WARNING] Firebase Admin SDK verification failed")
+        print("Some features may not work. Consider adding Firebase Admin role to the service account.")
+    
+    # Step 4: Set up Firebase project directory
+    if not setup_firebase_project(FIREBASE_PROJECT_DIR):
+        print("\n[FAILED] Could not set up Firebase project directory")
+        return 1
+    
+    # Step 5: Download Firebase rules
+    if not download_firebase_rules(credentials, FIREBASE_PROJECT_DIR):
+        print("\n[WARNING] Could not download Firebase rules")
+    
+    # Step 6: Verify Firebase CLI
+    verify_firebase_cli()
+    
+    # Summary
+    print("\n" + "=" * 50)
+    print("Setup Complete!")
+    print("=" * 50)
+    print(f"\nFirebase project ready at: {FIREBASE_PROJECT_DIR}")
+    print("\nYou can now:")
+    print(f"  1. cd {FIREBASE_PROJECT_DIR}")
+    print("  2. Edit firestore.rules, storage.rules, etc.")
+    print(f"  3. Deploy with: firebase deploy --project {PROJECT_ID}")
+    print("\nRelated services:")
+    print("  - AI Material Generator: https://ai-material-mtl-generator-83803613015.us-west1.run.app/")
+    
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

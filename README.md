@@ -2,17 +2,36 @@
 
 Devin development environment configuration for OD (Open Digital) projects.
 
-## Firebase Setup
+## Quick Start - First Run Setup
 
-This repository contains configuration for Firebase SDK and Google Authentication setup for Devin sessions.
+When starting a new Devin session, run the first-run setup script to automatically configure Firebase and download the project:
 
-### Prerequisites
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/digital-workshop-hub-service-account.json"
+python scripts/first_run_setup.py
+```
 
-- Python 3.x with `firebase-admin` and `google-auth` packages
+This will:
+1. Verify Google Auth credentials
+2. Verify Firebase Admin SDK access
+3. Download the Firebase project to `~/repos/digital-workshop-hub`
+4. Download current Firestore and Storage rules
+5. Set up the project ready for editing
+
+After setup, you can edit files and deploy:
+```bash
+cd ~/repos/digital-workshop-hub
+# Edit firestore.rules, storage.rules, etc.
+firebase deploy --project digital-workshop-hub
+```
+
+## Prerequisites
+
+- Python 3.x with `firebase-admin` and `google-auth` packages (auto-installed by setup script)
 - Firebase CLI (`npm install -g firebase-tools`)
-- Service account JSON key for the `digital-workshop-hub` project
+- Service account JSON key for the `digital-workshop-hub` project with **Firebase Admin** role
 
-### Authentication
+## Authentication
 
 For non-interactive authentication (recommended for Devin/CI), use a service account:
 
@@ -23,32 +42,22 @@ For non-interactive authentication (recommended for Devin/CI), use a service acc
    export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
    ```
 
-### Devin Session Setup
+## Devin Session Setup
 
 For new Devin sessions, ensure the following secrets are configured:
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to the service account JSON key file
 
-### Verification
+## Scripts
 
-To verify Firebase access is working:
+- `scripts/first_run_setup.py` - Automated first-run setup for new Devin sessions
+- `scripts/verify_firebase.py` - Verify Firebase access is working
 
-```python
-import firebase_admin
-from firebase_admin import credentials, auth
-
-cred = credentials.Certificate('/path/to/service-account-key.json')
-app = firebase_admin.initialize_app(cred)
-
-# Test Firebase Auth access
-page = auth.list_users()
-print(f"Found {len(list(page.users))} users")
-```
-
-### Project Information
+## Project Information
 
 - **Firebase Project ID**: `digital-workshop-hub`
 - **Service Account**: `digital-workshop-hub@appspot.gserviceaccount.com`
+- **Hosting URL**: https://digital-workshop-hub.web.app
 
-### Related Services
+## Related Services
 
 - AI Material Generator: `https://ai-material-mtl-generator-83803613015.us-west1.run.app/`
