@@ -57,6 +57,7 @@ firebase deploy --project digital-workshop-hub
 - `scripts/first_run_setup.py` - Automated first-run setup for new Devin sessions
 - `scripts/verify_firebase.py` - Verify Firebase access is working
 - `scripts/google_auth_setup.py` - Configure Google Sign-In authentication provider
+- `scripts/fetch_firebase_config.py` - Fetch Firebase web config and update login page
 
 ## Google Authentication
 
@@ -96,6 +97,31 @@ You can also enable Google Sign-In directly in the Firebase Console:
 1. Go to [Firebase Console Authentication](https://console.firebase.google.com/project/digital-workshop-hub/authentication/providers)
 2. Click on "Google" provider
 3. Enable it and save
+
+### Google OAuth Login Page
+
+The setup automatically creates a Google OAuth login page at `~/repos/digital-workshop-hub/public/index.html`. This page provides:
+
+- Google Sign-In button with Firebase Authentication
+- User profile display after login
+- Sign-out functionality
+- Responsive design for mobile and desktop
+
+To deploy the login page:
+
+```bash
+cd ~/repos/digital-workshop-hub
+
+# Fetch the Firebase web config (updates the login page with correct API keys)
+python ~/repos/DEV-OD-Computer/scripts/fetch_firebase_config.py
+
+# Deploy to Firebase Hosting
+firebase deploy --only hosting --project digital-workshop-hub
+```
+
+The login page will be available at:
+- https://digital-workshop-hub.web.app
+- https://digital-workshop-hub.firebaseapp.com
 
 ### Using Google Sign-In in Your App
 
