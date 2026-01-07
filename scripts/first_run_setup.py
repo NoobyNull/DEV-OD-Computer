@@ -337,10 +337,60 @@ def create_sentinel_file(creds_path):
         return False
 
 
+def verify_google_auth_provider(credentials):
+    """Verify Google Sign-In provider is configured in Firebase Auth."""
+    print("\n" + "=" * 50)
+    print("Step 6: Verifying Google Sign-In Provider")
+    print("=" * 50)
+    
+    from google.auth.transport.requests import Request
+    
+    # Refresh credentials if needed
+    if not credentials.valid:
+        credentials.refresh(Request())
+    
+    headers = {
+        'Authorization': f'Bearer {credentials.token}',
+        'Content-Type': 'application/json'
+    }
+    
+    # Check Google provider status
+    url = f"https://identitytoolkit.googleapis.com/admin/v2/projects/{PROJECT_ID}/defaultSupportedIdpConfigs/google.com"
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code == 200:
+        config = response.json()
+        enabled = config.get('enabled', False)
+        client_id = config.get('clientId', '')
+        
+        print(f"Google Sign-In provider: {'Enabled' if enabled else 'Disabled'}")
+        if client_id:
+            print(f"OAuth Client ID: {client_id[:30]}..." if len(client_id) > 30 else f"OAuth Client ID: {client_id}")
+        
+        if enabled:
+            print("Google Sign-In: OK")
+            return True
+        else:
+            print("Google Sign-In provider exists but is disabled")
+            print(f"Enable it at: https://console.firebase.google.com/project/{PROJECT_ID}/authentication/providers")
+            return False
+    elif response.status_code == 404:
+        print("Google Sign-In provider: Not configured")
+        print(f"\nTo enable Google Sign-In:")
+        print(f"  1. Go to Firebase Console: https://console.firebase.google.com/project/{PROJECT_ID}/authentication/providers")
+        print("  2. Click on 'Google' provider")
+        print("  3. Enable it and configure OAuth settings")
+        print("\nOr run: python scripts/google_auth_setup.py")
+        return False
+    else:
+        print(f"Warning: Could not check Google provider status: {response.status_code}")
+        return False
+
+
 def verify_firebase_cli():
     """Verify Firebase CLI is installed and working."""
     print("\n" + "=" * 50)
-    print("Step 6: Verifying Firebase CLI")
+    print("Step 7: Verifying Firebase CLI")
     print("=" * 50)
     
     try:
@@ -397,10 +447,16 @@ def main():
     if not download_firebase_rules(credentials, FIREBASE_PROJECT_DIR):
         print("\n[WARNING] Could not download Firebase rules")
     
-    # Step 6: Verify Firebase CLI
+    # Step 6: Verify Google Sign-In provider
+    google_auth_ok = verify_google_auth_provider(credentials)
+    if not google_auth_ok:
+        print("\n[INFO] Google Sign-In provider not configured")
+        print("Run 'python scripts/google_auth_setup.py' to configure it")
+    
+    # Step 7: Verify Firebase CLI
     verify_firebase_cli()
     
-    # Step 7: Create sentinel file to mark setup complete
+    # Step 8: Create sentinel file to mark setup complete
     create_sentinel_file(creds_path)
     
     # Summary
