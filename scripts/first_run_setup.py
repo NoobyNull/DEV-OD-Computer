@@ -95,9 +95,9 @@ def check_credentials():
         return creds_path
     
     # Fall back to GOOGLE_APPLICATION_CREDENTIALS environment variable
-    creds_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    creds_value = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
     
-    if not creds_path:
+    if not creds_value:
         print("ERROR: No credentials found")
         print("\nTo fix this, set one of the following:")
         print("1. GOOGLE_SERVICE_ACCOUNT_JSON - The JSON content of your service account key")
@@ -105,12 +105,58 @@ def check_credentials():
         print("2. GOOGLE_APPLICATION_CREDENTIALS - Path to your service account JSON file")
         return None
     
-    if not os.path.exists(creds_path):
-        print(f"ERROR: Credentials file not found: {creds_path}")
+    # Check if GOOGLE_APPLICATION_CREDENTIALS contains JSON content directly
+    # (instead of a file path)
+    creds_value_stripped = creds_value.strip()
+    if creds_value_stripped.startswith('{'):
+        print("Found JSON content in GOOGLE_APPLICATION_CREDENTIALS")
+        try:
+            creds_data = json.loads(creds_value_stripped)
+            
+            # Verify it looks like a service account key
+            required_fields = ['type', 'project_id', 'private_key', 'client_email']
+            for field in required_fields:
+                if field not in creds_data:
+                    print(f"ERROR: Invalid service account JSON - missing '{field}'")
+                    return None
+            
+            if creds_data.get('type') != 'service_account':
+                print("ERROR: JSON is not a service account key")
+                return None
+            
+            # Create credentials directory with secure permissions
+            os.makedirs(CREDENTIALS_DIR, mode=0o700, exist_ok=True)
+            
+            # Write credentials file with secure permissions
+            with open(CREDENTIALS_FILE, 'w') as f:
+                json.dump(creds_data, f, indent=2)
+            
+            # Set file permissions to owner read/write only (600)
+            os.chmod(CREDENTIALS_FILE, stat.S_IRUSR | stat.S_IWUSR)
+            
+            print(f"Created credentials file: {CREDENTIALS_FILE}")
+            print(f"  Project ID: {creds_data.get('project_id')}")
+            print(f"  Service Account: {creds_data.get('client_email')}")
+            
+            # Update environment variable to point to the file
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = CREDENTIALS_FILE
+            
+            return CREDENTIALS_FILE
+            
+        except json.JSONDecodeError as e:
+            print(f"ERROR: Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS: {e}")
+            return None
+        except Exception as e:
+            print(f"ERROR: Could not create credentials file: {e}")
+            return None
+    
+    # It's a file path
+    if not os.path.exists(creds_value):
+        print(f"ERROR: Credentials file not found: {creds_value}")
         return None
     
-    print(f"Credentials file found: {creds_path}")
-    return creds_path
+    print(f"Credentials file found: {creds_value}")
+    return creds_value
 
 
 def verify_google_auth(creds_path):
